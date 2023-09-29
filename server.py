@@ -1,5 +1,7 @@
 #  coding: utf-8 
 import socketserver
+import os
+import mimetypes
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -28,11 +30,71 @@ import socketserver
 
 
 class MyWebServer(socketserver.BaseRequestHandler):
-    
     def handle(self):
         self.data = self.request.recv(1024).strip()
         print ("Got a request of: %s\n" % self.data)
-        self.request.sendall(bytearray("OK",'utf-8'))
+        data_decoded = self.data.decode('utf-8')
+
+        # Parse the request
+        request_line = data_decoded.split('\r\n')[0]
+        request_method, request_path, _ = request_line.split()
+
+        # Check for accessing sensitive system files
+        if "../" in request_path:
+            self.HTTP_message(404, "Not Found")
+            return
+
+        # Check for GET method
+        if request_method != "GET":
+            self.HTTP_message(405, "Method Not Allowed")
+            return
+
+        # Get the file path
+        current_dir = os.getcwd()
+        path = os.path.join(current_dir, "www", request_path.strip('/'))
+
+        # Handle directory redirection
+        if os.path.isdir(path):
+            if not request_path.endswith("/"):
+                self.HTTP_message(301, "Moved Permanently", location=request_path + '/')
+                return
+            path = os.path.join(path, "index.html")
+
+        # Check if the file or directory exists
+        if not os.path.exists(path):
+            self.HTTP_message(404, "Not Found")
+            return
+            
+
+        # Get content type and content length
+        content_length = os.path.getsize(path)
+        mime_type, _ = mimetypes.guess_type(path)
+
+        # Read the content of the file
+        with open(path, 'rb') as f:
+            content = f.read()
+
+        # Send the response
+        self.HTTP_message(200, "OK", content_type=mime_type, content=content)
+
+    def HTTP_message(self, HTTP_status_code, HTTP_status_message, location=None, content_type=None, content=None):
+        HTTP_headers_response = f"HTTP/1.1 {HTTP_status_code} {HTTP_status_message}\r\n"
+
+        if location:
+            HTTP_headers_response += f"Location: {location}\r\n"
+
+        if content_type:
+            HTTP_headers_response += f"Content-Type: {content_type}\r\n"
+
+        if content:
+            HTTP_headers_response += f"Content-Length: {len(content)}\r\n\r\n"
+            binary_response = HTTP_headers_response.encode('utf-8') + content
+
+        else:
+            HTTP_headers_response += "\r\n"
+            binary_response = HTTP_headers_response.encode('utf-8')
+
+        self.request.sendall(binary_response)
 
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
