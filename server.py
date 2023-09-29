@@ -32,7 +32,7 @@ import mimetypes
 class MyWebServer(socketserver.BaseRequestHandler):
     def handle(self):
         self.data = self.request.recv(1024).strip()
-        print ("Got a request of: %s\n" % self.data)
+        #print ("Got a request of: %s\n" % self.data)
         data_decoded = self.data.decode('utf-8')
 
         # Parse the request
